@@ -92,7 +92,7 @@ export interface Terminal {
 export interface TerminalOptions {
     cols: number;
     rows: number;
-    onWrite: (data: Uint8Array) => void;
+    onData: (data: Uint8Array) => void;
     onQueueRender?: () => void;
 }
 

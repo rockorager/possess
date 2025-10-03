@@ -5,7 +5,7 @@ test("getScreenDimensions returns terminal dimensions", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     const dims = terminal.getScreenDimensions();
@@ -19,7 +19,7 @@ test("getCell returns text content at correct positions", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("Hello");
@@ -38,7 +38,7 @@ test("getCell returns bold style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[1mBold\x1B[0m Normal");
@@ -58,7 +58,7 @@ test("getCell returns italic style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[3mItalic\x1B[0m");
@@ -75,7 +75,7 @@ test("getCell returns underline style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[4mUnderline\x1B[0m");
@@ -91,7 +91,7 @@ test("getCell returns foreground palette color", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[31mRed\x1B[0m");
@@ -108,7 +108,7 @@ test("getCell returns RGB foreground color", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[38;2;255;128;64mRGB\x1B[0m");
@@ -127,7 +127,7 @@ test("getCell returns background palette color", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[42mGreen BG\x1B[0m");
@@ -144,7 +144,7 @@ test("getCell returns RGB background color", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[48;2;200;100;50mBG\x1B[0m");
@@ -163,7 +163,7 @@ test("getCell handles multiple styles combined", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[1;3;4;31mStyled\x1B[0m");
@@ -183,7 +183,7 @@ test("getCell handles newlines", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("Line1\r\nLine2");
@@ -200,7 +200,7 @@ test("getCell handles empty cells", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("A");
@@ -216,7 +216,7 @@ test("getCell with inverse style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[7mInverse\x1B[0m");
@@ -232,7 +232,7 @@ test("getCell with faint style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[2mFaint\x1B[0m");
@@ -248,7 +248,7 @@ test("getCell with strikethrough style", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[9mStrike\x1B[0m");

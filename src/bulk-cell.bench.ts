@@ -6,7 +6,7 @@ function setupTerminal() {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Fill with styled content

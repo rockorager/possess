@@ -5,7 +5,7 @@ test("getMode returns false for disabled modes", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Mode 2026 (synchronized output) should be disabled by default
@@ -21,7 +21,7 @@ test("getMode returns true when synchronized output is enabled", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Enable synchronized output mode (CSI ? 2026 h)
@@ -36,7 +36,7 @@ test("getMode returns false when synchronized output is disabled", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Enable then disable synchronized output mode
@@ -53,7 +53,7 @@ test("isSyncModeEnabled returns true when mode is enabled", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Enable synchronized output mode
@@ -68,7 +68,7 @@ test("isSyncModeEnabled returns false when mode is disabled", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Enable then disable
@@ -85,7 +85,7 @@ test("getMode works with bracketed paste mode", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     expect(terminal.getMode(2004)).toBe(false);
@@ -105,7 +105,7 @@ test("getMode returns false for unknown mode numbers", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Test with a valid mode number that doesn't exist
@@ -118,7 +118,7 @@ test("getMode returns false for invalid mode numbers > 65535", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     // Mode numbers that don't fit in u16 should return false

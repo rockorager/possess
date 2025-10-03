@@ -7,7 +7,7 @@ test("createTerminal creates a terminal instance", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: (data) => {
+        onData: (data) => {
             writtenData.push(data);
         },
     });
@@ -25,7 +25,7 @@ test("terminal responds to device status report", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: (data) => {
+        onData: (data) => {
             writtenData.push(data);
         },
     });
@@ -46,7 +46,7 @@ test("terminal responds to cursor position request", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: (data) => {
+        onData: (data) => {
             writtenData.push(data);
         },
     });
@@ -67,7 +67,7 @@ test("terminal accepts both string and Uint8Array", () => {
     const terminal = createTerminal({
         cols: 80,
         rows: 24,
-        onWrite: (data) => {
+        onData: (data) => {
             writtenData.push(data);
         },
     });

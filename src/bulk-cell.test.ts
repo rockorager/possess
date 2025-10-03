@@ -5,7 +5,7 @@ test("getRow returns all cells in a row", () => {
     const terminal = createTerminal({
         cols: 10,
         rows: 5,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("Hello");
@@ -26,7 +26,7 @@ test("getRow with styled content", () => {
     const terminal = createTerminal({
         cols: 10,
         rows: 5,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[1;31mRed\x1B[0m");
@@ -44,7 +44,7 @@ test("getRow on different rows", () => {
     const terminal = createTerminal({
         cols: 10,
         rows: 5,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("Line1\r\nLine2\r\nLine3");
@@ -67,7 +67,7 @@ test("getAllCells returns all terminal content", () => {
     const terminal = createTerminal({
         cols: 5,
         rows: 3,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("ABCDE\r\nFGHIJ\r\nKLMNO");
@@ -90,7 +90,7 @@ test("getAllCells with mixed styled and unstyled content", () => {
     const terminal = createTerminal({
         cols: 5,
         rows: 2,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     terminal.write("\x1B[31mRed\x1B[0m\r\n\x1B[1mBold");
@@ -111,7 +111,7 @@ test("getAllCells with empty terminal", () => {
     const terminal = createTerminal({
         cols: 3,
         rows: 2,
-        onWrite: () => {},
+        onData: () => {},
     });
 
     const allCells = terminal.getAllCells();

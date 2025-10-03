@@ -109,10 +109,10 @@ fn createTerminal(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
         return null;
     }
 
-    // Extract callback from options.onWrite
+    // Extract callback from options.onData
     var callback_val: c.napi_value = undefined;
-    if (c.napi_get_named_property(env, options, "onWrite", &callback_val) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "options.onWrite is required");
+    if (c.napi_get_named_property(env, options, "onData", &callback_val) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "options.onData is required");
         return null;
     }
 
