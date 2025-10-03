@@ -66,6 +66,14 @@ export interface NativeTerminal {
     dispose(): void;
     getScreenDimensions(): ScreenDimensions;
     getCellData(row: number, col: number): CellData;
+    getRow(row: number): CellData[];
+    getRegion(
+        startRow: number,
+        startCol: number,
+        endRow: number,
+        endCol: number,
+    ): CellData[][];
+    getAllCells(): CellData[][];
 }
 
 export interface Terminal {
@@ -73,6 +81,14 @@ export interface Terminal {
     dispose(): void;
     getScreenDimensions(): ScreenDimensions;
     getCellData(row: number, col: number): CellData;
+    getRow(row: number): CellData[];
+    getRegion(
+        startRow: number,
+        startCol: number,
+        endRow: number,
+        endCol: number,
+    ): CellData[][];
+    getAllCells(): CellData[][];
 }
 
 export interface TerminalOptions {
