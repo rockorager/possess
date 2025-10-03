@@ -12,6 +12,7 @@ const TerminalContext = struct {
     terminal: Terminal,
     env: c.napi_env,
     callback_ref: c.napi_ref,
+    render_callback_ref: ?c.napi_ref,
 };
 
 /// Callback function called from terminal.zig when it needs to write to the process
@@ -39,6 +40,24 @@ export fn possess_terminal_write_callback(ctx: *anyopaque, data_ptr: [*]const u8
 
     var result: c.napi_value = undefined;
     _ = c.napi_call_function(self.env, global, callback, 1, &buffer, &result);
+}
+
+/// Callback function called from terminal.zig when it needs to queue a render
+export fn possess_terminal_queue_render_callback(ctx: *anyopaque) void {
+    const self: *TerminalContext = @ptrCast(@alignCast(ctx));
+
+    if (self.render_callback_ref == null) return;
+
+    // Get the callback function from the ref
+    var callback: c.napi_value = undefined;
+    if (c.napi_get_reference_value(self.env, self.render_callback_ref.?, &callback) != c.napi_ok) return;
+
+    // Call the callback with no arguments
+    var global: c.napi_value = undefined;
+    _ = c.napi_get_global(self.env, &global);
+
+    var result: c.napi_value = undefined;
+    _ = c.napi_call_function(self.env, global, callback, 0, null, &result);
 }
 
 export fn napi_register_module_v1(env: c.napi_env, exports: c.napi_value) c.napi_value {
@@ -104,10 +123,24 @@ fn createTerminal(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
         return null;
     }
 
+    // Extract optional onQueueRender callback
+    var render_callback_ref: ?c.napi_ref = null;
+    var render_callback_val: c.napi_value = undefined;
+    if (c.napi_get_named_property(env, options, "onQueueRender", &render_callback_val) == c.napi_ok) {
+        var value_type: c.napi_valuetype = undefined;
+        if (c.napi_typeof(env, render_callback_val, &value_type) == c.napi_ok and value_type == c.napi_function) {
+            var ref: c.napi_ref = undefined;
+            if (c.napi_create_reference(env, render_callback_val, 1, &ref) == c.napi_ok) {
+                render_callback_ref = ref;
+            }
+        }
+    }
+
     // Allocate terminal context
     const allocator = std.heap.c_allocator;
     const ctx = allocator.create(TerminalContext) catch {
         _ = c.napi_delete_reference(env, callback_ref);
+        if (render_callback_ref) |ref| _ = c.napi_delete_reference(env, ref);
         _ = c.napi_throw_error(env, null, "Failed to allocate terminal context");
         return null;
     };
@@ -115,6 +148,7 @@ fn createTerminal(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
     // Set up the context
     ctx.env = env;
     ctx.callback_ref = callback_ref;
+    ctx.render_callback_ref = render_callback_ref;
 
     // Initialize terminal with options
     ctx.terminal.init(allocator, .{
@@ -152,25 +186,45 @@ fn createTerminal(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
     _ = c.napi_create_function(env, null, 0, terminalGetScreenDimensions, null, &get_dims_func);
     _ = c.napi_set_named_property(env, terminal_obj, "getScreenDimensions", get_dims_func);
 
-    // Add getCellData method
+    // Add getCell method
     var get_cell_func: c.napi_value = undefined;
-    _ = c.napi_create_function(env, null, 0, terminalGetCellData, null, &get_cell_func);
-    _ = c.napi_set_named_property(env, terminal_obj, "getCellData", get_cell_func);
+    _ = c.napi_create_function(env, null, 0, terminalGetCell, null, &get_cell_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "getCell", get_cell_func);
 
     // Add getRow method
     var get_row_func: c.napi_value = undefined;
     _ = c.napi_create_function(env, null, 0, terminalGetRow, null, &get_row_func);
     _ = c.napi_set_named_property(env, terminal_obj, "getRow", get_row_func);
 
-    // Add getRegion method
-    var get_region_func: c.napi_value = undefined;
-    _ = c.napi_create_function(env, null, 0, terminalGetRegion, null, &get_region_func);
-    _ = c.napi_set_named_property(env, terminal_obj, "getRegion", get_region_func);
-
     // Add getAllCells method
     var get_all_func: c.napi_value = undefined;
     _ = c.napi_create_function(env, null, 0, terminalGetAllCells, null, &get_all_func);
     _ = c.napi_set_named_property(env, terminal_obj, "getAllCells", get_all_func);
+
+    // Add clearDirty method
+    var clear_dirty_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalClearDirty, null, &clear_dirty_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "clearDirty", clear_dirty_func);
+
+    // Add hasAnyDirtyRows method
+    var has_dirty_rows_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalHasAnyDirtyRows, null, &has_dirty_rows_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "hasAnyDirtyRows", has_dirty_rows_func);
+
+    // Add getMode method
+    var get_mode_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalGetMode, null, &get_mode_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "getMode", get_mode_func);
+
+    // Add isSyncModeEnabled method
+    var is_sync_mode_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalIsSyncModeEnabled, null, &is_sync_mode_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "isSyncModeEnabled", is_sync_mode_func);
+
+    // Add getRowIfDirty method
+    var get_row_if_dirty_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalGetRowIfDirty, null, &get_row_if_dirty_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "getRowIfDirty", get_row_if_dirty_func);
 
     return terminal_obj;
 }
@@ -252,6 +306,7 @@ fn terminalDispose(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.n
     if (ctx) |c_ptr| {
         c_ptr.terminal.deinit();
         _ = c.napi_delete_reference(env, c_ptr.callback_ref);
+        if (c_ptr.render_callback_ref) |ref| _ = c.napi_delete_reference(env, ref);
         std.heap.c_allocator.destroy(c_ptr);
     }
 
@@ -287,7 +342,7 @@ fn terminalGetScreenDimensions(env: c.napi_env, info: c.napi_callback_info) call
     return result;
 }
 
-fn terminalGetCellData(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+fn terminalGetCell(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
     // Get 'this' and arguments
     var argc: usize = 2;
     var args: [2]c.napi_value = undefined;
@@ -498,83 +553,6 @@ fn terminalGetRow(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
     return result;
 }
 
-fn terminalGetRegion(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
-    // Get 'this' and arguments
-    var argc: usize = 4;
-    var args: [4]c.napi_value = undefined;
-    var this: c.napi_value = undefined;
-    if (c.napi_get_cb_info(env, info, &argc, &args, &this, null) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "Failed to parse arguments");
-        return null;
-    }
-
-    if (argc < 4) {
-        _ = c.napi_throw_error(env, null, "Expected 4 arguments: startRow, startCol, endRow, endCol");
-        return null;
-    }
-
-    // Get the context
-    var ctx: ?*TerminalContext = null;
-    if (!getTerminalContext(env, this, &ctx)) return null;
-
-    // Get arguments
-    var start_row_u32: u32 = 0;
-    var start_col_u32: u32 = 0;
-    var end_row_u32: u32 = 0;
-    var end_col_u32: u32 = 0;
-
-    if (c.napi_get_value_uint32(env, args[0], &start_row_u32) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "startRow must be a number");
-        return null;
-    }
-    if (c.napi_get_value_uint32(env, args[1], &start_col_u32) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "startCol must be a number");
-        return null;
-    }
-    if (c.napi_get_value_uint32(env, args[2], &end_row_u32) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "endRow must be a number");
-        return null;
-    }
-    if (c.napi_get_value_uint32(env, args[3], &end_col_u32) != c.napi_ok) {
-        _ = c.napi_throw_error(env, null, "endCol must be a number");
-        return null;
-    }
-
-    const dims = ctx.?.terminal.getScreenDimensions();
-    if (end_row_u32 >= dims.rows or end_col_u32 >= dims.cols) {
-        _ = c.napi_throw_error(env, null, "region out of bounds");
-        return null;
-    }
-
-    const row_count = end_row_u32 - start_row_u32 + 1;
-    const col_count = end_col_u32 - start_col_u32 + 1;
-
-    // Create 2D array
-    var result: c.napi_value = undefined;
-    _ = c.napi_create_array_with_length(env, row_count, &result);
-
-    // Fill the array with rows
-    var row: u32 = start_row_u32;
-    while (row <= end_row_u32) : (row += 1) {
-        var row_array: c.napi_value = undefined;
-        _ = c.napi_create_array_with_length(env, col_count, &row_array);
-
-        var col: u32 = start_col_u32;
-        while (col <= end_col_u32) : (col += 1) {
-            const cell_ref = ctx.?.terminal.getCellRef(@intCast(col), @intCast(row));
-            if (cell_ref) |ref| {
-                const cell_data = Terminal.extractCellData(ref);
-                const cell_obj = createCellDataObject(env, cell_data);
-                _ = c.napi_set_element(env, row_array, col - start_col_u32, cell_obj);
-            }
-        }
-
-        _ = c.napi_set_element(env, result, row - start_row_u32, row_array);
-    }
-
-    return result;
-}
-
 fn terminalGetAllCells(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
     // Get 'this'
     var this: c.napi_value = undefined;
@@ -611,6 +589,162 @@ fn terminalGetAllCells(env: c.napi_env, info: c.napi_callback_info) callconv(.c)
 
         _ = c.napi_set_element(env, result, row, row_array);
     }
+
+    return result;
+}
+
+fn terminalClearDirty(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this'
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, null, null, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to get this");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    ctx.?.terminal.clearDirty();
+
+    return null;
+}
+
+fn terminalHasAnyDirtyRows(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this'
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, null, null, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to get this");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    const has_dirty_rows = ctx.?.terminal.hasAnyDirtyRows();
+
+    // Create boolean result
+    var result: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, has_dirty_rows, &result);
+
+    return result;
+}
+
+fn terminalGetMode(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this' and arguments
+    var argc: usize = 1;
+    var args: [1]c.napi_value = undefined;
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, &argc, &args, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to parse arguments");
+        return null;
+    }
+
+    if (argc < 1) {
+        _ = c.napi_throw_error(env, null, "Expected 1 argument: mode number");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    // Get mode number argument
+    var mode_u32: u32 = 0;
+    if (c.napi_get_value_uint32(env, args[0], &mode_u32) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "mode must be a number");
+        return null;
+    }
+
+    // If mode number doesn't fit in u16, just return false
+    const mode_enabled = if (mode_u32 > 65535) false else ctx.?.terminal.getMode(@intCast(mode_u32));
+
+    // Create boolean result
+    var result: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, mode_enabled, &result);
+
+    return result;
+}
+
+fn terminalIsSyncModeEnabled(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this'
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, null, null, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to get this");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    const is_sync_enabled = ctx.?.terminal.isSyncModeEnabled();
+
+    // Create boolean result
+    var result: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, is_sync_enabled, &result);
+
+    return result;
+}
+
+fn terminalGetRowIfDirty(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this' and arguments
+    var argc: usize = 1;
+    var args: [1]c.napi_value = undefined;
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, &argc, &args, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to parse arguments");
+        return null;
+    }
+
+    if (argc < 1) {
+        _ = c.napi_throw_error(env, null, "Expected 1 argument: row");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    // Get row argument
+    var row_u32: u32 = 0;
+    if (c.napi_get_value_uint32(env, args[0], &row_u32) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "row must be a number");
+        return null;
+    }
+
+    const dims = ctx.?.terminal.getScreenDimensions();
+    if (row_u32 >= dims.rows) {
+        _ = c.napi_throw_error(env, null, "row out of bounds");
+        return null;
+    }
+
+    // Check if row is dirty
+    if (!ctx.?.terminal.isRowDirty(@intCast(row_u32))) {
+        // Return null if not dirty
+        var result: c.napi_value = undefined;
+        _ = c.napi_get_null(env, &result);
+        return result;
+    }
+
+    // Row is dirty, return the row data (same as terminalGetRow)
+    var result: c.napi_value = undefined;
+    _ = c.napi_create_array_with_length(env, dims.cols, &result);
+
+    // Fill the array with cell data
+    var col: u32 = 0;
+    while (col < dims.cols) : (col += 1) {
+        const cell_ref = ctx.?.terminal.getCellRef(@intCast(col), @intCast(row_u32));
+        if (cell_ref) |ref| {
+            const cell_data = Terminal.extractCellData(ref);
+            const cell_obj = createCellDataObject(env, cell_data);
+            _ = c.napi_set_element(env, result, col, cell_obj);
+        }
+    }
+
+    // Automatically clear the dirty flag after returning the row
+    ctx.?.terminal.clearRowDirty(@intCast(row_u32));
 
     return result;
 }

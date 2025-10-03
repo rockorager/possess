@@ -65,36 +65,35 @@ export interface NativeTerminal {
     write(data: Uint8Array): void;
     dispose(): void;
     getScreenDimensions(): ScreenDimensions;
-    getCellData(row: number, col: number): CellData;
+    getCell(row: number, col: number): CellData;
     getRow(row: number): CellData[];
-    getRegion(
-        startRow: number,
-        startCol: number,
-        endRow: number,
-        endCol: number,
-    ): CellData[][];
     getAllCells(): CellData[][];
+    clearDirty(): void;
+    hasAnyDirtyRows(): boolean;
+    getMode(mode: number): boolean;
+    isSyncModeEnabled(): boolean;
+    getRowIfDirty(row: number): CellData[] | null;
 }
 
 export interface Terminal {
     write(data: string | Uint8Array): void;
     dispose(): void;
     getScreenDimensions(): ScreenDimensions;
-    getCellData(row: number, col: number): CellData;
+    getCell(row: number, col: number): CellData;
     getRow(row: number): CellData[];
-    getRegion(
-        startRow: number,
-        startCol: number,
-        endRow: number,
-        endCol: number,
-    ): CellData[][];
     getAllCells(): CellData[][];
+    clearDirty(): void;
+    hasAnyDirtyRows(): boolean;
+    getMode(mode: number): boolean;
+    isSyncModeEnabled(): boolean;
+    getRowIfDirty(row: number): CellData[] | null;
 }
 
 export interface TerminalOptions {
     cols: number;
     rows: number;
     onWrite: (data: Uint8Array) => void;
+    onQueueRender?: () => void;
 }
 
 interface NativeBindings {

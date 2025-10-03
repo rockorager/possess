@@ -7,6 +7,10 @@ export fn possess_terminal_write_callback(ctx: *anyopaque, data_ptr: [*]const u8
     _ = data_len;
 }
 
+export fn possess_terminal_queue_render_callback(ctx: *anyopaque) void {
+    _ = ctx;
+}
+
 test {
     std.testing.refAllDecls(@This());
     _ = @import("terminal.zig");

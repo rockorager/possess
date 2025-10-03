@@ -22,14 +22,14 @@ function setupTerminal() {
     return terminal;
 }
 
-// Benchmark: Get a single row using individual getCellData calls
-bench("Individual getCellData - single row (80 cells)", () => {
+// Benchmark: Get a single row using individual getCell calls
+bench("Individual getCell - single row (80 cells)", () => {
     const terminal = setupTerminal();
     const row = 10;
     const _cells = [];
 
     for (let col = 0; col < 80; col++) {
-        _cells.push(terminal.getCellData(row, col));
+        _cells.push(terminal.getCell(row, col));
     }
 
     terminal.dispose();
@@ -42,15 +42,15 @@ bench("Bulk getRow - single row (80 cells)", () => {
     terminal.dispose();
 });
 
-// Benchmark: Get a 10x10 region using individual getCellData calls
-bench("Individual getCellData - 10x10 region (100 cells)", () => {
+// Benchmark: Get a 10x10 region using individual getCell calls
+bench("Individual getCell - 10x10 region (100 cells)", () => {
     const terminal = setupTerminal();
     const _cells = [];
 
     for (let row = 5; row < 15; row++) {
         const rowCells = [];
         for (let col = 10; col < 20; col++) {
-            rowCells.push(terminal.getCellData(row, col));
+            rowCells.push(terminal.getCell(row, col));
         }
         _cells.push(rowCells);
     }
@@ -58,22 +58,15 @@ bench("Individual getCellData - 10x10 region (100 cells)", () => {
     terminal.dispose();
 });
 
-// Benchmark: Get a 10x10 region using bulk getRegion
-bench("Bulk getRegion - 10x10 region (100 cells)", () => {
-    const terminal = setupTerminal();
-    const _cells = terminal.getRegion(5, 10, 14, 19);
-    terminal.dispose();
-});
-
-// Benchmark: Get all cells using individual getCellData calls
-bench("Individual getCellData - all cells (80x24 = 1920 cells)", () => {
+// Benchmark: Get all cells using individual getCell calls
+bench("Individual getCell - all cells (80x24 = 1920 cells)", () => {
     const terminal = setupTerminal();
     const _cells = [];
 
     for (let row = 0; row < 24; row++) {
         const rowCells = [];
         for (let col = 0; col < 80; col++) {
-            rowCells.push(terminal.getCellData(row, col));
+            rowCells.push(terminal.getCell(row, col));
         }
         _cells.push(rowCells);
     }
@@ -89,14 +82,14 @@ bench("Bulk getAllCells - all cells (80x24 = 1920 cells)", () => {
 });
 
 // Benchmark: Get multiple rows individually
-bench("Individual getCellData - 5 rows (400 cells)", () => {
+bench("Individual getCell - 5 rows (400 cells)", () => {
     const terminal = setupTerminal();
     const _cells = [];
 
     for (let row = 10; row < 15; row++) {
         const rowCells = [];
         for (let col = 0; col < 80; col++) {
-            rowCells.push(terminal.getCellData(row, col));
+            rowCells.push(terminal.getCell(row, col));
         }
         _cells.push(rowCells);
     }

@@ -69,8 +69,18 @@ pub const Terminal = struct {
         }
     }
 
-    // This is implemented in main.zig
+    /// Queue a render. This is called when the terminal state has changed
+    /// and needs to be re-rendered.
+    pub fn queueRender(self: *Terminal) void {
+        if (self.write_callback_ctx) |ctx| {
+            // Call the extern function defined in main.zig
+            possess_terminal_queue_render_callback(ctx);
+        }
+    }
+
+    // These are implemented in main.zig
     extern fn possess_terminal_write_callback(ctx: *anyopaque, data_ptr: [*]const u8, data_len: usize) void;
+    extern fn possess_terminal_queue_render_callback(ctx: *anyopaque) void;
 
     pub fn resize(self: *Terminal, cols: u16, rows: u16) !void {
         try self.terminal.resize(self.allocator, cols, rows);
@@ -199,7 +209,7 @@ pub const Terminal = struct {
         if (mode == .complete) {
             // Whenever we erase the full display, scroll to bottom.
             try self.terminal.scrollViewport(.{ .bottom = {} });
-            // TODO: queue render
+            self.queueRender();
         }
 
         self.terminal.eraseDisplay(mode, protected);
@@ -409,8 +419,7 @@ pub const Terminal = struct {
             // Schedule a render since we changed colors
             .reverse_colors => {
                 self.terminal.flags.dirty.reverse_colors = true;
-                // TODO: queue render
-                // try self.queueRender();
+                self.queueRender();
             },
 
             // Origin resets cursor pos. This is called whether or not
@@ -427,20 +436,17 @@ pub const Terminal = struct {
 
             .alt_screen_legacy => {
                 self.terminal.switchScreenMode(.@"47", enabled);
-                // TODO: queue render
-                // try self.queueRender();
+                self.queueRender();
             },
 
             .alt_screen => {
                 self.terminal.switchScreenMode(.@"1047", enabled);
-                // TODO: queue render
-                // try self.queueRender();
+                self.queueRender();
             },
 
             .alt_screen_save_cursor_clear_enter => {
                 self.terminal.switchScreenMode(.@"1049", enabled);
-                // TODO: queue render
-                // try self.queueRender();
+                self.queueRender();
             },
 
             // Mode 1048 is xterm's conditional save cursor depending
@@ -476,8 +482,7 @@ pub const Terminal = struct {
             .synchronized_output => {
                 // TODO: send sync message
                 // if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
-                // TODO: queue render
-                // try self.queueRender();
+                self.queueRender();
             },
 
             .linefeed => {
@@ -592,6 +597,56 @@ pub const Terminal = struct {
     /// Get the dimensions of the active screen
     pub fn getScreenDimensions(self: *Terminal) Size {
         return self.size;
+    }
+
+    /// Check if any rows in the active screen have dirty bits set
+    pub fn hasAnyDirtyRows(self: *Terminal) bool {
+        const pt = ghostty.point.Point{ .screen = .{ .x = 0, .y = 0 } };
+        const cell_ref = self.terminal.screen.pages.getCell(pt) orelse return false;
+        return cell_ref.node.data.isDirty();
+    }
+
+    /// Get the state of a terminal mode by its numeric value
+    /// For DEC private modes (like 2026, 2004), use the mode number directly
+    pub fn getMode(self: *Terminal, mode_num: u16) bool {
+        // Try DEC private mode first (most common terminal modes use this)
+        const mode = ghostty.modes.modeFromInt(mode_num, false) orelse {
+            // Fall back to ANSI mode
+            const ansi_mode = ghostty.modes.modeFromInt(mode_num, true) orelse return false;
+            return self.terminal.modes.get(ansi_mode);
+        };
+        return self.terminal.modes.get(mode);
+    }
+
+    /// Check if synchronized output mode (2026) is enabled
+    pub fn isSyncModeEnabled(self: *Terminal) bool {
+        return self.terminal.modes.get(.synchronized_output);
+    }
+
+    /// Clear all terminal and screen dirty flags after rendering
+    /// Note: This does NOT clear row-level dirty bits - use clearRowDirty for that
+    pub fn clearDirty(self: *Terminal) void {
+        self.terminal.flags.dirty = .{};
+        self.terminal.screen.dirty = .{};
+    }
+
+    /// Clear the dirty bit for a specific row
+    pub fn clearRowDirty(self: *Terminal, row: u16) void {
+        const pt = ghostty.point.Point{ .screen = .{ .x = 0, .y = row } };
+        const cell_ref = self.terminal.screen.pages.getCell(pt) orelse return;
+        var dirty = cell_ref.node.data.dirtyBitSet();
+        const pin = self.terminal.screen.pages.pin(pt) orelse return;
+        if (pin.y < dirty.bit_length) {
+            dirty.unset(pin.y);
+        }
+    }
+
+    /// Check if a specific row is dirty
+    pub fn isRowDirty(self: *Terminal, row: u16) bool {
+        const pt = ghostty.point.Point{ .screen = .{ .x = 0, .y = row } };
+        const cell_ref = self.terminal.screen.pages.getCell(pt) orelse return false;
+        const pin = self.terminal.screen.pages.pin(pt) orelse return false;
+        return cell_ref.node.data.isRowDirty(pin.y);
     }
 
     /// Cell reference from page list

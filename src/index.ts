@@ -25,22 +25,29 @@ export function createTerminal(options: TerminalOptions): Terminal {
         getScreenDimensions() {
             return nativeTerminal.getScreenDimensions();
         },
-        getCellData(row: number, col: number) {
-            return nativeTerminal.getCellData(row, col);
+        getCell(row: number, col: number) {
+            return nativeTerminal.getCell(row, col);
         },
         getRow(row: number) {
             return nativeTerminal.getRow(row);
         },
-        getRegion(
-            startRow: number,
-            startCol: number,
-            endRow: number,
-            endCol: number,
-        ) {
-            return nativeTerminal.getRegion(startRow, startCol, endRow, endCol);
-        },
         getAllCells() {
             return nativeTerminal.getAllCells();
+        },
+        clearDirty() {
+            nativeTerminal.clearDirty();
+        },
+        hasAnyDirtyRows() {
+            return nativeTerminal.hasAnyDirtyRows();
+        },
+        getMode(mode: number) {
+            return nativeTerminal.getMode(mode);
+        },
+        isSyncModeEnabled() {
+            return nativeTerminal.isSyncModeEnabled();
+        },
+        getRowIfDirty(row: number) {
+            return nativeTerminal.getRowIfDirty(row);
         },
     };
 }
