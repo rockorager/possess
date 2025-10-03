@@ -32,3 +32,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Zig build artifacts
+native/zig-out/
+native/zig-cache/
+native/.zig-cache/
+
+# Native addon (build locally, commit for distribution)
+lib/

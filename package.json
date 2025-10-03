@@ -12,12 +12,17 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "lib"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node --format esm && tsc --emitDeclarationOnly",
+    "build:native": "./scripts/build-native.sh",
+    "build": "bun run build:native && bun build src/index.ts --outdir dist --target node --format esm && tsc --emitDeclarationOnly",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "prebuild": "bun run build:native",
+    "example": "bun run examples/basic.ts",
+    "example:node": "bun run build && node examples/basic-node.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
