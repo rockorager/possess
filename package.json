@@ -19,7 +19,7 @@
         "build:native": "./scripts/build-native.sh",
         "build": "bun run build:native && bun build src/index.ts --outdir dist --target node --format esm && tsc --emitDeclarationOnly",
         "typecheck": "tsc --noEmit",
-        "test": "bun test",
+        "test": "cd native && zig build test && cd .. && bun test",
         "lint": "eslint src examples",
         "format": "zig fmt native && prettier --write .",
         "check": "bun run typecheck && bun run lint && bun run format",

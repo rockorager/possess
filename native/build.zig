@@ -35,4 +35,21 @@ pub fn build(b: *std.Build) void {
     lib_mod.addImport("ghostty", ghostty.module("ghostty-vt"));
 
     b.installArtifact(lib);
+
+    // Test step
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("src/test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_mod.addImport("ghostty", ghostty.module("ghostty-vt"));
+
+    const tests = b.addTest(.{
+        .root_module = test_mod,
+    });
+    tests.linkLibC();
+
+    const run_tests = b.addRunArtifact(tests);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_tests.step);
 }
