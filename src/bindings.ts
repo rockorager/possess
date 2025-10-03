@@ -7,30 +7,36 @@ const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function getPlatformPath(): string {
-  const platformName = platform();
-  const archName = arch();
-  const platformMap: Record<string, string> = {
-    "darwin-arm64": "darwin-arm64",
-    "darwin-x64": "darwin-x64",
-    "linux-x64": "linux-x64",
-    "win32-x64": "win32-x64",
-  };
+    const platformName = platform();
+    const archName = arch();
+    const platformMap: Record<string, string> = {
+        "darwin-arm64": "darwin-arm64",
+        "darwin-x64": "darwin-x64",
+        "linux-x64": "linux-x64",
+        "win32-x64": "win32-x64",
+    };
 
-  const key = `${platformName}-${archName}`;
-  const platformPath = platformMap[key];
+    const key = `${platformName}-${archName}`;
+    const platformPath = platformMap[key];
 
-  if (!platformPath) {
-    throw new Error(`Unsupported platform: ${key}`);
-  }
+    if (!platformPath) {
+        throw new Error(`Unsupported platform: ${key}`);
+    }
 
-  return platformPath;
+    return platformPath;
 }
 
-const addonPath = join(__dirname, "..", "lib", getPlatformPath(), "possess.node");
+const addonPath = join(
+    __dirname,
+    "..",
+    "lib",
+    getPlatformPath(),
+    "possess.node",
+);
 
 interface NativeBindings {
-  example(): string;
-  // TODO: Add your function signatures here
+    example(): string;
+    // TODO: Add your function signatures here
 }
 
 export const native: NativeBindings = require(addonPath);

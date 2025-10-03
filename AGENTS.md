@@ -19,3 +19,8 @@ test("hello world", () => {
 });
 ```
 
+## Finding libghostty source code
+
+1. Run `zig env` to get the global cache directory
+2. Look for the dependency folder by searching for its name in that directory and subdirectories
+3. The source code will be in the `src/` directory of the dependency

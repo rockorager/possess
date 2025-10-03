@@ -21,6 +21,7 @@ bun run build
 ```
 
 This will:
+
 1. Build the Zig native addon with Ghostty integration
 2. Compile TypeScript to JavaScript
 3. Generate TypeScript declarations
@@ -36,16 +37,19 @@ console.log(example()); // "Hello from Zig!"
 ## Examples
 
 Run the example with Bun (uses TypeScript directly):
+
 ```bash
 bun run example
 ```
 
 Run the example with Node.js (builds first, then runs compiled JS):
+
 ```bash
 bun run example:node
 ```
 
 Or run manually:
+
 ```bash
 # With Bun
 bun examples/basic.ts
