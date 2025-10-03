@@ -577,21 +577,18 @@ pub const Terminal = struct {
             if (self.terminal.modes.get(mode)) break :code 1;
             break :code 2;
         };
-        // TODO: respond
-        _ = code;
 
-        // var msg: termio.Message = .{ .write_small = .{} };
-        // const resp = try std.fmt.bufPrint(
-        //     &msg.write_small.data,
-        //     "\x1B[{s}{};{}$y",
-        //     .{
-        //         if (ansi) "" else "?",
-        //         mode_raw,
-        //         code,
-        //     },
-        // );
-        // msg.write_small.len = @intCast(resp.len);
-        // self.messageWriter(msg);
+        var buf: [32]u8 = undefined;
+        const resp = try std.fmt.bufPrint(
+            &buf,
+            "\x1B[{s}{};{}$y",
+            .{
+                if (ansi) "" else "?",
+                mode_raw,
+                code,
+            },
+        );
+        self.writeToProcess(resp);
     }
 
     /// Get the dimensions of the active screen
