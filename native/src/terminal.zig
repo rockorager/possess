@@ -1,38 +1,597 @@
 const std = @import("std");
-const vt = @import("ghostty");
+const ghostty = @import("ghostty");
+
+const Stream = ghostty.Stream(*Terminal);
+const Size = struct {
+    rows: u16,
+    cols: u16,
+};
+
+const log = std.log.scoped(.possess);
 
 pub const Terminal = struct {
     allocator: std.mem.Allocator,
-    terminal: vt.Terminal,
+    terminal: ghostty.Terminal,
+    stream: Stream,
+    size: Size,
 
-    pub fn init(allocator: std.mem.Allocator, cols: u16, rows: u16) !Terminal {
-        const terminal = try vt.Terminal.init(allocator, .{
+    /// The default cursor state. This is used with CSI q. This is
+    /// set to true when we're currently in the default cursor state.
+    default_cursor: bool = true,
+    default_cursor_style: ghostty.CursorStyle = .block,
+    default_cursor_blink: ?bool = null,
+    default_cursor_color: ?ghostty.color.RGB = null,
+
+    pub fn init(self: *Terminal, allocator: std.mem.Allocator, cols: u16, rows: u16) !void {
+        const terminal = try ghostty.Terminal.init(allocator, .{
             .cols = cols,
             .rows = rows,
         });
-
-        return Terminal{
+        const stream = Stream.init(self);
+        self.* = .{
             .allocator = allocator,
             .terminal = terminal,
+            .stream = stream,
+            .size = .{
+                .cols = cols,
+                .rows = rows,
+            },
         };
     }
 
     pub fn deinit(self: *Terminal) void {
         self.terminal.deinit(self.allocator);
+        self.stream.deinit();
+    }
+
+    pub fn nextSlice(self: *Terminal, input: []const u8) !void {
+        try self.stream.nextSlice(input);
     }
 
     pub fn resize(self: *Terminal, cols: u16, rows: u16) !void {
         try self.terminal.resize(self.allocator, cols, rows);
     }
+
+    pub fn print(self: *Terminal, c: u21) !void {
+        try self.terminal.print(c);
+    }
+
+    pub fn dcsHook(self: *Terminal, dcs: ghostty.DCS) !void {
+        _ = self;
+        _ = dcs;
+        // TODO: implement
+    }
+
+    pub fn dcsPut(self: *Terminal, byte: u8) !void {
+        _ = self;
+        _ = byte;
+        // TODO: implement
+    }
+
+    pub fn dcsUnhook(self: *Terminal) !void {
+        // TODO: implement
+        _ = self;
+    }
+
+    pub fn apcStart(self: *Terminal) !void {
+        // TODO: implement
+        _ = self;
+    }
+
+    pub fn apcPut(self: *Terminal, byte: u8) !void {
+        // TODO: implement
+        _ = self;
+        _ = byte;
+    }
+
+    pub fn apcEnd(self: *Terminal) !void {
+        // TODO: implement
+        _ = self;
+    }
+
+    pub fn enquiry(self: *Terminal) !void {
+        _ = self;
+        // TODO: callback
+    }
+
+    pub fn bell(self: *Terminal) !void {
+        _ = self;
+        // TODO: callback
+    }
+
+    pub fn backspace(self: *Terminal) !void {
+        self.terminal.backspace();
+    }
+
+    pub fn horizontalTab(self: *Terminal, count: u16) !void {
+        for (0..count) |_| {
+            const x = self.terminal.screen.cursor.x;
+            try self.terminal.horizontalTab();
+            if (x == self.terminal.screen.cursor.x) break;
+        }
+    }
+
+    pub fn linefeed(self: *Terminal) !void {
+        try self.terminal.linefeed();
+    }
+
+    pub fn carriageReturn(self: *Terminal) !void {
+        self.terminal.carriageReturn();
+    }
+
+    pub fn invokeCharset(
+        self: *Terminal,
+        active: ghostty.CharsetActiveSlot,
+        slot: ghostty.CharsetSlot,
+        single: bool,
+    ) !void {
+        self.terminal.invokeCharset(active, slot, single);
+    }
+
+    pub inline fn setCursorLeft(self: *Terminal, amount: u16) !void {
+        self.terminal.cursorLeft(amount);
+    }
+
+    pub inline fn setCursorRight(self: *Terminal, amount: u16) !void {
+        self.terminal.cursorRight(amount);
+    }
+
+    pub inline fn setCursorDown(self: *Terminal, amount: u16, carriage: bool) !void {
+        self.terminal.cursorDown(amount);
+        if (carriage) self.terminal.carriageReturn();
+    }
+
+    pub inline fn setCursorUp(self: *Terminal, amount: u16, carriage: bool) !void {
+        self.terminal.cursorUp(amount);
+        if (carriage) self.terminal.carriageReturn();
+    }
+
+    pub inline fn setCursorCol(self: *Terminal, col: u16) !void {
+        self.terminal.setCursorPos(self.terminal.screen.cursor.y + 1, col);
+    }
+
+    pub inline fn setCursorColRelative(self: *Terminal, offset: u16) !void {
+        self.terminal.setCursorPos(
+            self.terminal.screen.cursor.y + 1,
+            self.terminal.screen.cursor.x + 1 +| offset,
+        );
+    }
+
+    pub inline fn setCursorRow(self: *Terminal, row: u16) !void {
+        self.terminal.setCursorPos(row, self.terminal.screen.cursor.x + 1);
+    }
+
+    pub inline fn setCursorRowRelative(self: *Terminal, offset: u16) !void {
+        self.terminal.setCursorPos(
+            self.terminal.screen.cursor.y + 1 +| offset,
+            self.terminal.screen.cursor.x + 1,
+        );
+    }
+
+    pub inline fn setCursorPos(self: *Terminal, row: u16, col: u16) !void {
+        self.terminal.setCursorPos(row, col);
+    }
+
+    pub inline fn eraseDisplay(self: *Terminal, mode: ghostty.EraseDisplay, protected: bool) !void {
+        if (mode == .complete) {
+            // Whenever we erase the full display, scroll to bottom.
+            try self.terminal.scrollViewport(.{ .bottom = {} });
+            // TODO: queue render
+        }
+
+        self.terminal.eraseDisplay(mode, protected);
+    }
+
+    pub inline fn eraseLine(self: *Terminal, mode: ghostty.EraseLine, protected: bool) !void {
+        self.terminal.eraseLine(mode, protected);
+    }
+
+    pub inline fn deleteChars(self: *Terminal, count: usize) !void {
+        self.terminal.deleteChars(count);
+    }
+
+    pub inline fn eraseChars(self: *Terminal, count: usize) !void {
+        self.terminal.eraseChars(count);
+    }
+
+    pub inline fn insertLines(self: *Terminal, count: usize) !void {
+        self.terminal.insertLines(count);
+    }
+
+    pub inline fn insertBlanks(self: *Terminal, count: usize) !void {
+        self.terminal.insertBlanks(count);
+    }
+
+    pub inline fn deleteLines(self: *Terminal, count: usize) !void {
+        self.terminal.deleteLines(count);
+    }
+
+    pub inline fn reverseIndex(self: *Terminal) !void {
+        self.terminal.reverseIndex();
+    }
+
+    pub inline fn index(self: *Terminal) !void {
+        try self.terminal.index();
+    }
+
+    pub inline fn nextLine(self: *Terminal) !void {
+        try self.terminal.index();
+        self.terminal.carriageReturn();
+    }
+
+    pub inline fn setTopAndBottomMargin(self: *Terminal, top: u16, bot: u16) !void {
+        self.terminal.setTopAndBottomMargin(top, bot);
+    }
+
+    pub inline fn setLeftAndRightMarginAmbiguous(self: *Terminal) !void {
+        if (self.terminal.modes.get(.enable_left_and_right_margin)) {
+            try self.setLeftAndRightMargin(0, 0);
+        } else {
+            self.terminal.saveCursor();
+        }
+    }
+
+    pub inline fn setLeftAndRightMargin(self: *Terminal, left: u16, right: u16) !void {
+        self.terminal.setLeftAndRightMargin(left, right);
+    }
+
+    pub inline fn scrollDown(self: *Terminal, count: usize) !void {
+        self.terminal.scrollDown(count);
+    }
+
+    pub inline fn scrollUp(self: *Terminal, count: usize) !void {
+        self.terminal.scrollUp(count);
+    }
+
+    pub inline fn tabClear(self: *Terminal, cmd: ghostty.TabClear) !void {
+        self.terminal.tabClear(cmd);
+    }
+
+    pub inline fn tabSet(self: *Terminal) !void {
+        self.terminal.tabSet();
+    }
+
+    pub inline fn tabReset(self: *Terminal) !void {
+        self.terminal.tabReset();
+    }
+
+    pub inline fn horizontalTabBack(self: *Terminal, count: u16) !void {
+        for (0..count) |_| {
+            const x = self.terminal.screen.cursor.x;
+            try self.terminal.horizontalTabBack();
+            if (x == self.terminal.screen.cursor.x) break;
+        }
+    }
+
+    pub inline fn printRepeat(self: *Terminal, count: usize) !void {
+        try self.terminal.printRepeat(count);
+    }
+
+    pub fn deviceAttributes(
+        self: *Terminal,
+        req: ghostty.DeviceAttributeReq,
+        params: []const u16,
+    ) !void {
+        _ = params;
+        _ = self;
+        _ = req;
+        // TODO: implement
+
+        // // For the below, we quack as a VT220. We don't quack as
+        // // a 420 because we don't support DCS sequences.
+        // switch (req) {
+        //     .primary => self.messageWriter(.{
+        //         // 62 = Level 2 conformance
+        //         // 22 = Color text
+        //         // 52 = Clipboard access
+        //         .write_stable = if (self.clipboard_write != .deny)
+        //             "\x1B[?62;22;52c"
+        //         else
+        //             "\x1B[?62;22c",
+        //     }),
+        //
+        //     .secondary => self.messageWriter(.{
+        //         .write_stable = "\x1B[>1;10;0c",
+        //     }),
+        //
+        //     else => log.warn("unimplemented device attributes req: {}", .{req}),
+        // }
+    }
+
+    pub fn deviceStatusReport(
+        self: *Terminal,
+        req: ghostty.device_status.Request,
+    ) !void {
+        _ = self;
+        _ = req;
+        // TODO: implement
+        // switch (req) {
+        //     .operating_status => self.messageWriter(.{ .write_stable = "\x1B[0n" }),
+        //
+        //     .cursor_position => {
+        //         const pos: struct {
+        //             x: usize,
+        //             y: usize,
+        //         } = if (self.terminal.modes.get(.origin)) .{
+        //             .x = self.terminal.screen.cursor.x -| self.terminal.scrolling_region.left,
+        //             .y = self.terminal.screen.cursor.y -| self.terminal.scrolling_region.top,
+        //         } else .{
+        //             .x = self.terminal.screen.cursor.x,
+        //             .y = self.terminal.screen.cursor.y,
+        //         };
+        //
+        //         // Response always is at least 4 chars, so this leaves the
+        //         // remainder for the row/column as base-10 numbers. This
+        //         // will support a very large terminal.
+        //         var msg: termio.Message = .{ .write_small = .{} };
+        //         const resp = try std.fmt.bufPrint(&msg.write_small.data, "\x1B[{};{}R", .{
+        //             pos.y + 1,
+        //             pos.x + 1,
+        //         });
+        //         msg.write_small.len = @intCast(resp.len);
+        //
+        //         self.messageWriter(msg);
+        //     },
+        //
+        //     .color_scheme => self.surfaceMessageWriter(.{ .report_color_scheme = true }),
+        // }
+    }
+
+    pub inline fn setProtectedMode(self: *Terminal, mode: ghostty.ProtectedMode) !void {
+        self.terminal.setProtectedMode(mode);
+    }
+
+    pub fn setMode(self: *Terminal, mode: ghostty.Mode, enabled: bool) !void {
+        // Note: this function doesn't need to grab the render state or
+        // terminal locks because it is only called from process() which
+        // grabs the lock.
+
+        // If we are setting cursor blinking, we ignore it if we have
+        // a default cursor blink setting set. This is a really weird
+        // behavior so this comment will go deep into trying to explain it.
+        //
+        // There are two ways to set cursor blinks: DECSCUSR (CSI _ q)
+        // and DEC mode 12. DECSCUSR is the modern approach and has a
+        // way to revert to the "default" (as defined by the terminal)
+        // cursor style and blink by doing "CSI 0 q". DEC mode 12 controls
+        // blinking and is either on or off and has no way to set a
+        // default. DEC mode 12 is also the more antiquated approach.
+        //
+        // The problem is that if the user specifies a desired default
+        // cursor blink with `cursor-style-blink`, the moment a running
+        // program uses DEC mode 12, the cursor blink can never be reset
+        // to the default without an explicit DECSCUSR. But if a program
+        // is using mode 12, it is by definition not using DECSCUSR.
+        // This makes for somewhat annoying interactions where a poorly
+        // (or legacy) behaved program will stop blinking, and it simply
+        // never restarts.
+        //
+        // To get around this, we have a special case where if the user
+        // specifies some explicit default cursor blink desire, we ignore
+        // DEC mode 12. We allow DECSCUSR to still set the cursor blink
+        // because programs using DECSCUSR usually are well behaved and
+        // reset the cursor blink to the default when they exit.
+        //
+        // To be extra safe, users can also add a manual `CSI 0 q` to
+        // their shell config when they render prompts to ensure the
+        // cursor is exactly as they request.
+        if (mode == .cursor_blinking and
+            self.default_cursor_blink != null)
+        {
+            return;
+        }
+
+        // We first always set the raw mode on our mode state.
+        self.terminal.modes.set(mode, enabled);
+
+        // And then some modes require additional processing.
+        switch (mode) {
+            // Just noting here that autorepeat has no effect on
+            // the terminal. xterm ignores this mode and so do we.
+            // We know about just so that we don't log that it is
+            // an unknown mode.
+            .autorepeat => {},
+
+            // Schedule a render since we changed colors
+            .reverse_colors => {
+                self.terminal.flags.dirty.reverse_colors = true;
+                // TODO: queue render
+                // try self.queueRender();
+            },
+
+            // Origin resets cursor pos. This is called whether or not
+            // we're enabling or disabling origin mode and whether or
+            // not the value changed.
+            .origin => self.terminal.setCursorPos(1, 1),
+
+            .enable_left_and_right_margin => if (!enabled) {
+                // When we disable left/right margin mode we need to
+                // reset the left/right margins.
+                self.terminal.scrolling_region.left = 0;
+                self.terminal.scrolling_region.right = self.terminal.cols - 1;
+            },
+
+            .alt_screen_legacy => {
+                self.terminal.switchScreenMode(.@"47", enabled);
+                // TODO: queue render
+                // try self.queueRender();
+            },
+
+            .alt_screen => {
+                self.terminal.switchScreenMode(.@"1047", enabled);
+                // TODO: queue render
+                // try self.queueRender();
+            },
+
+            .alt_screen_save_cursor_clear_enter => {
+                self.terminal.switchScreenMode(.@"1049", enabled);
+                // TODO: queue render
+                // try self.queueRender();
+            },
+
+            // Mode 1048 is xterm's conditional save cursor depending
+            // on if alt screen is enabled or not (at the terminal emulator
+            // level). Alt screen is always enabled for us so this just
+            // does a save/restore cursor.
+            .save_cursor => {
+                if (enabled) {
+                    self.terminal.saveCursor();
+                } else {
+                    try self.terminal.restoreCursor();
+                }
+            },
+
+            // Force resize back to the window size
+            .enable_mode_3 => {
+                self.terminal.resize(
+                    self.allocator,
+                    self.size.cols,
+                    self.size.rows,
+                ) catch |err| {
+                    log.err("error updating terminal size: {}", .{err});
+                };
+            },
+
+            .@"132_column" => try self.terminal.deccolm(
+                self.allocator,
+                if (enabled) .@"132_cols" else .@"80_cols",
+            ),
+
+            // We need to start a timer to prevent the emulator being hung
+            // forever.
+            .synchronized_output => {
+                // TODO: send sync message
+                // if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
+                // TODO: queue render
+                // try self.queueRender();
+            },
+
+            .linefeed => {
+                // TODO: send linefeed mode
+                // self.messageWriter(.{ .linefeed_mode = enabled });
+            },
+
+            .in_band_size_reports => {
+                // TODO:
+                // if (enabled) self.messageWriter(.{
+                //     .size_report = .mode_2048,
+                // });
+            },
+
+            .focus_event => {
+                // TODO:
+                // if (enabled) self.messageWriter(.{
+                //     .focused = self.terminal.flags.focused,
+                // });
+            },
+
+            .mouse_event_x10 => {
+                if (enabled) {
+                    self.terminal.flags.mouse_event = .x10;
+                    // try self.setMouseShape(.default);
+                } else {
+                    self.terminal.flags.mouse_event = .none;
+                    // try self.setMouseShape(.text);
+                }
+            },
+            .mouse_event_normal => {
+                if (enabled) {
+                    self.terminal.flags.mouse_event = .normal;
+                    // try self.setMouseShape(.default);
+                } else {
+                    self.terminal.flags.mouse_event = .none;
+                    // try self.setMouseShape(.text);
+                }
+            },
+            .mouse_event_button => {
+                if (enabled) {
+                    self.terminal.flags.mouse_event = .button;
+                    // try self.setMouseShape(.default);
+                } else {
+                    self.terminal.flags.mouse_event = .none;
+                    // try self.setMouseShape(.text);
+                }
+            },
+            .mouse_event_any => {
+                if (enabled) {
+                    self.terminal.flags.mouse_event = .any;
+                    // try self.setMouseShape(.default);
+                } else {
+                    self.terminal.flags.mouse_event = .none;
+                    // try self.setMouseShape(.text);
+                }
+            },
+
+            .mouse_format_utf8 => self.terminal.flags.mouse_format = if (enabled) .utf8 else .x10,
+            .mouse_format_sgr => self.terminal.flags.mouse_format = if (enabled) .sgr else .x10,
+            .mouse_format_urxvt => self.terminal.flags.mouse_format = if (enabled) .urxvt else .x10,
+            .mouse_format_sgr_pixels => self.terminal.flags.mouse_format = if (enabled) .sgr_pixels else .x10,
+
+            else => {},
+        }
+    }
+
+    pub fn setModifyKeyFormat(self: *Terminal, format: ghostty.ModifyKeyFormat) !void {
+        self.terminal.flags.modify_other_keys_2 = false;
+        switch (format) {
+            .other_keys => |v| switch (v) {
+                .numeric => self.terminal.flags.modify_other_keys_2 = true,
+                else => {},
+            },
+            else => {},
+        }
+    }
+
+    pub inline fn setAttribute(self: *Terminal, attr: ghostty.Attribute) !void {
+        switch (attr) {
+            .unknown => |unk| log.warn("unimplemented or unknown SGR attribute: {any}", .{unk}),
+
+            else => self.terminal.setAttribute(attr) catch |err|
+                log.warn("error setting attribute {}: {}", .{ attr, err }),
+        }
+    }
+
+    pub fn requestMode(self: *Terminal, mode_raw: u16, ansi: bool) !void {
+        // Get the mode value and respond.
+        const code: u8 = code: {
+            const mode = ghostty.modes.modeFromInt(mode_raw, ansi) orelse break :code 0;
+            if (self.terminal.modes.get(mode)) break :code 1;
+            break :code 2;
+        };
+        // TODO: respond
+        _ = code;
+
+        // var msg: termio.Message = .{ .write_small = .{} };
+        // const resp = try std.fmt.bufPrint(
+        //     &msg.write_small.data,
+        //     "\x1B[{s}{};{}$y",
+        //     .{
+        //         if (ansi) "" else "?",
+        //         mode_raw,
+        //         code,
+        //     },
+        // );
+        // msg.write_small.len = @intCast(resp.len);
+        // self.messageWriter(msg);
+    }
 };
 
 test "Terminal init and deinit" {
-    var terminal = try Terminal.init(std.testing.allocator, 80, 24);
+    var terminal: Terminal = undefined;
+    try terminal.init(std.testing.allocator, 80, 24);
     defer terminal.deinit();
 }
 
 test "Terminal resize" {
-    var terminal = try Terminal.init(std.testing.allocator, 80, 24);
+    var terminal: Terminal = undefined;
+    try terminal.init(std.testing.allocator, 80, 24);
     try terminal.resize(40, 12);
+    defer terminal.deinit();
+}
+
+test "Terminal nextSlice" {
+    var terminal: Terminal = undefined;
+    try terminal.init(std.testing.allocator, 80, 24);
+    try terminal.nextSlice("hello");
     defer terminal.deinit();
 }
