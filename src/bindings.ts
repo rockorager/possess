@@ -34,14 +34,45 @@ const addonPath = join(
     "possess.node",
 );
 
+export interface ScreenDimensions {
+    rows: number;
+    cols: number;
+}
+
+export interface ColorInfo {
+    type: 0 | 1 | 2; // 0 = none, 1 = palette, 2 = rgb
+    paletteIdx?: number;
+    r?: number;
+    g?: number;
+    b?: number;
+}
+
+export interface CellData {
+    text: string;
+    wide: number; // 0 = narrow, 1 = wide, 2 = spacer_tail, 3 = spacer_head
+    fg: ColorInfo;
+    bg: ColorInfo;
+    bold: boolean;
+    italic: boolean;
+    faint: boolean;
+    inverse: boolean;
+    invisible: boolean;
+    strikethrough: boolean;
+    underline: number; // 0 = none, 1 = single, 2 = double, etc.
+}
+
 export interface NativeTerminal {
     write(data: Uint8Array): void;
     dispose(): void;
+    getScreenDimensions(): ScreenDimensions;
+    getCellData(row: number, col: number): CellData;
 }
 
 export interface Terminal {
     write(data: string | Uint8Array): void;
     dispose(): void;
+    getScreenDimensions(): ScreenDimensions;
+    getCellData(row: number, col: number): CellData;
 }
 
 export interface TerminalOptions {

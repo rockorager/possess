@@ -659,8 +659,13 @@ pub const Terminal = struct {
         const cell = cell_ref.cell;
         const page = cell_ref.page;
 
-        // Get the style
-        const style = page.styles.get(page.memory, cell.style_id);
+        // Spacer cells don't have their own style, and style_id 0 is default
+        const style_ptr = if (cell.wide == .spacer_tail or cell.wide == .spacer_head or cell.style_id == 0)
+            null
+        else
+            page.styles.get(page.memory, cell.style_id);
+
+        const style = if (style_ptr) |s| s.* else ghostty.Style{};
 
         // Extract grapheme data if it's a multi-codepoint grapheme
         const grapheme = if (cell.content_tag == .codepoint_grapheme)

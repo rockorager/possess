@@ -1,6 +1,12 @@
 import { native, type TerminalOptions, type Terminal } from "./bindings.js";
 
-export type { Terminal, TerminalOptions } from "./bindings.js";
+export type {
+    Terminal,
+    TerminalOptions,
+    ScreenDimensions,
+    ColorInfo,
+    CellData,
+} from "./bindings.js";
 
 const textEncoder = new TextEncoder();
 
@@ -15,6 +21,12 @@ export function createTerminal(options: TerminalOptions): Terminal {
         },
         dispose(): void {
             nativeTerminal.dispose();
+        },
+        getScreenDimensions() {
+            return nativeTerminal.getScreenDimensions();
+        },
+        getCellData(row: number, col: number) {
+            return nativeTerminal.getCellData(row, col);
         },
     };
 }
