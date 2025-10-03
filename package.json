@@ -1,0 +1,29 @@
+{
+  "name": "possess",
+  "version": "0.0.1",
+  "description": "A TypeScript library",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node --format esm && tsc --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
