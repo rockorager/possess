@@ -19,6 +19,16 @@ test("hello world", () => {
 });
 ```
 
+## Zig/Native Code Conventions
+
+All exported functions must be prefixed with `possess_` and use snake_case naming.
+
+Examples:
+
+- `possess_terminal_write_callback`
+- `possess_get_screen_dimensions`
+- `possess_get_cell_data`
+
 ## Finding libghostty source code
 
 1. Run `zig env` to get the global cache directory

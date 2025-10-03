@@ -588,6 +588,175 @@ pub const Terminal = struct {
         // msg.write_small.len = @intCast(resp.len);
         // self.messageWriter(msg);
     }
+
+    /// Get the dimensions of the active screen
+    pub fn getScreenDimensions(self: *Terminal) Size {
+        return self.size;
+    }
+
+    /// Cell reference from page list
+    const CellRef = struct {
+        page: *const ghostty.Page,
+        cell: *const ghostty.Cell,
+    };
+
+    /// Get a cell reference at a specific position in the active screen
+    /// Returns null if the position is out of bounds
+    pub fn getCellRef(self: *Terminal, x: u16, y: u16) ?CellRef {
+        if (x >= self.size.cols or y >= self.size.rows) return null;
+
+        // Use PageList.getCell which takes a Point
+        const pt = ghostty.point.Point{
+            .screen = .{ .x = x, .y = y },
+        };
+        const cell_ref = self.terminal.screen.pages.getCell(pt) orelse return null;
+        return .{
+            .page = &cell_ref.node.data,
+            .cell = cell_ref.cell,
+        };
+    }
+
+    /// RGB color structure
+    pub const RGB = struct {
+        r: u8,
+        g: u8,
+        b: u8,
+    };
+
+    /// Maximum UTF-8 encoded grapheme size (4 bytes per codepoint * 16 codepoints)
+    const MAX_GRAPHEME_BYTES = 64;
+
+    /// Cell data structure with actual displayable information
+    pub const CellData = struct {
+        // Text content - UTF-8 encoded grapheme text
+        text: [MAX_GRAPHEME_BYTES]u8,
+        text_len: u8,
+
+        // Layout
+        wide: u2, // 0 = narrow, 1 = wide, 2 = spacer_tail, 3 = spacer_head
+
+        // Style - colors
+        fg_color_type: u8, // 0 = none/default, 1 = palette, 2 = rgb
+        fg_palette_idx: u8,
+        fg_rgb: RGB,
+
+        bg_color_type: u8, // 0 = none/default, 1 = palette, 2 = rgb
+        bg_palette_idx: u8,
+        bg_rgb: RGB,
+
+        // Style - flags
+        bold: bool,
+        italic: bool,
+        faint: bool,
+        inverse: bool,
+        invisible: bool,
+        strikethrough: bool,
+        underline: u4, // From sgr.Attribute.Underline enum
+    };
+
+    /// Extract complete cell data including grapheme and style
+    pub fn extractCellData(cell_ref: CellRef) CellData {
+        const cell = cell_ref.cell;
+        const page = cell_ref.page;
+
+        // Get the style
+        const style = page.styles.get(page.memory, cell.style_id);
+
+        // Extract grapheme data if it's a multi-codepoint grapheme
+        const grapheme = if (cell.content_tag == .codepoint_grapheme)
+            page.lookupGrapheme(cell)
+        else
+            null;
+
+        var data = CellData{
+            .text = undefined,
+            .text_len = 0,
+            .wide = @intFromEnum(cell.wide),
+
+            // Colors - defaults
+            .fg_color_type = 0,
+            .fg_palette_idx = 0,
+            .fg_rgb = .{ .r = 0, .g = 0, .b = 0 },
+            .bg_color_type = 0,
+            .bg_palette_idx = 0,
+            .bg_rgb = .{ .r = 0, .g = 0, .b = 0 },
+
+            // Style flags
+            .bold = style.flags.bold,
+            .italic = style.flags.italic,
+            .faint = style.flags.faint,
+            .inverse = style.flags.inverse,
+            .invisible = style.flags.invisible,
+            .strikethrough = style.flags.strikethrough,
+            .underline = @intFromEnum(style.flags.underline),
+        };
+
+        // Encode grapheme to UTF-8
+        const primary_cp = switch (cell.content_tag) {
+            .codepoint, .codepoint_grapheme => cell.content.codepoint,
+            .bg_color_palette, .bg_color_rgb => 0,
+        };
+
+        var write_pos: usize = 0;
+
+        // Encode primary codepoint
+        if (primary_cp != 0) {
+            const len = std.unicode.utf8Encode(primary_cp, data.text[write_pos..]) catch 0;
+            write_pos += len;
+        }
+
+        // Encode additional grapheme codepoints if present
+        if (grapheme) |g| {
+            for (g) |cp| {
+                if (write_pos + 4 > MAX_GRAPHEME_BYTES) break;
+                const len = std.unicode.utf8Encode(cp, data.text[write_pos..]) catch 0;
+                write_pos += len;
+            }
+        }
+
+        data.text_len = @intCast(write_pos);
+
+        // Extract foreground color
+        switch (style.fg_color) {
+            .none => {},
+            .palette => |idx| {
+                data.fg_color_type = 1;
+                data.fg_palette_idx = idx;
+            },
+            .rgb => |rgb| {
+                data.fg_color_type = 2;
+                data.fg_rgb = .{ .r = rgb.r, .g = rgb.g, .b = rgb.b };
+            },
+        }
+
+        // Extract background color (check cell content tag first)
+        switch (cell.content_tag) {
+            .bg_color_palette => {
+                data.bg_color_type = 1;
+                data.bg_palette_idx = cell.content.color_palette;
+            },
+            .bg_color_rgb => {
+                const rgb = cell.content.color_rgb;
+                data.bg_color_type = 2;
+                data.bg_rgb = .{ .r = rgb.r, .g = rgb.g, .b = rgb.b };
+            },
+            else => {
+                switch (style.bg_color) {
+                    .none => {},
+                    .palette => |idx| {
+                        data.bg_color_type = 1;
+                        data.bg_palette_idx = idx;
+                    },
+                    .rgb => |rgb| {
+                        data.bg_color_type = 2;
+                        data.bg_rgb = .{ .r = rgb.r, .g = rgb.g, .b = rgb.b };
+                    },
+                }
+            },
+        }
+
+        return data;
+    }
 };
 
 test "Terminal init and deinit" {

@@ -147,6 +147,16 @@ fn createTerminal(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.na
     _ = c.napi_create_function(env, null, 0, terminalDispose, null, &dispose_func);
     _ = c.napi_set_named_property(env, terminal_obj, "dispose", dispose_func);
 
+    // Add getScreenDimensions method
+    var get_dims_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalGetScreenDimensions, null, &get_dims_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "getScreenDimensions", get_dims_func);
+
+    // Add getCellData method
+    var get_cell_func: c.napi_value = undefined;
+    _ = c.napi_create_function(env, null, 0, terminalGetCellData, null, &get_cell_func);
+    _ = c.napi_set_named_property(env, terminal_obj, "getCellData", get_cell_func);
+
     return terminal_obj;
 }
 
@@ -231,4 +241,194 @@ fn terminalDispose(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.n
     }
 
     return null;
+}
+
+fn terminalGetScreenDimensions(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this'
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, null, null, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to get this");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    const dims = ctx.?.terminal.getScreenDimensions();
+
+    // Create result object { rows, cols }
+    var result: c.napi_value = undefined;
+    _ = c.napi_create_object(env, &result);
+
+    var rows: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, dims.rows, &rows);
+    _ = c.napi_set_named_property(env, result, "rows", rows);
+
+    var cols: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, dims.cols, &cols);
+    _ = c.napi_set_named_property(env, result, "cols", cols);
+
+    return result;
+}
+
+fn terminalGetCellData(env: c.napi_env, info: c.napi_callback_info) callconv(.c) c.napi_value {
+    // Get 'this' and arguments
+    var argc: usize = 2;
+    var args: [2]c.napi_value = undefined;
+    var this: c.napi_value = undefined;
+    if (c.napi_get_cb_info(env, info, &argc, &args, &this, null) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to parse arguments");
+        return null;
+    }
+
+    if (argc < 2) {
+        _ = c.napi_throw_error(env, null, "Expected 2 arguments: row, col");
+        return null;
+    }
+
+    // Get the context
+    var ctx: ?*TerminalContext = null;
+    if (!getTerminalContext(env, this, &ctx)) return null;
+
+    // Get row and col arguments
+    var row_u32: u32 = 0;
+    if (c.napi_get_value_uint32(env, args[0], &row_u32) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "row must be a number");
+        return null;
+    }
+
+    var col_u32: u32 = 0;
+    if (c.napi_get_value_uint32(env, args[1], &col_u32) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "col must be a number");
+        return null;
+    }
+
+    // Get the cell reference
+    const cell_ref = ctx.?.terminal.getCellRef(@intCast(col_u32), @intCast(row_u32));
+    if (cell_ref == null) {
+        _ = c.napi_throw_error(env, null, "Cell position out of bounds");
+        return null;
+    }
+
+    const cell_data = Terminal.extractCellData(cell_ref.?);
+
+    return createCellDataObject(env, cell_data);
+}
+
+/// Helper function to get terminal context from 'this'
+fn getTerminalContext(env: c.napi_env, this: c.napi_value, ctx: *?*TerminalContext) bool {
+    var ctx_val: c.napi_value = undefined;
+    if (c.napi_get_named_property(env, this, "_ctx", &ctx_val) != c.napi_ok) {
+        _ = c.napi_throw_error(env, null, "Failed to get terminal context");
+        return false;
+    }
+
+    if (c.napi_get_value_external(env, ctx_val, @ptrCast(ctx)) != c.napi_ok or ctx.* == null) {
+        _ = c.napi_throw_error(env, null, "Invalid terminal context");
+        return false;
+    }
+
+    return true;
+}
+
+/// Helper to create cell data object from CellData struct
+fn createCellDataObject(env: c.napi_env, cell_data: Terminal.CellData) c.napi_value {
+    var result: c.napi_value = undefined;
+    _ = c.napi_create_object(env, &result);
+
+    // Text content - UTF-8 encoded grapheme
+    var text: c.napi_value = undefined;
+    _ = c.napi_create_string_utf8(env, @ptrCast(cell_data.text[0..cell_data.text_len]), cell_data.text_len, &text);
+    _ = c.napi_set_named_property(env, result, "text", text);
+
+    // Layout
+    var wide: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, cell_data.wide, &wide);
+    _ = c.napi_set_named_property(env, result, "wide", wide);
+
+    // Foreground color
+    var fg_obj: c.napi_value = undefined;
+    _ = c.napi_create_object(env, &fg_obj);
+
+    var fg_type: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, cell_data.fg_color_type, &fg_type);
+    _ = c.napi_set_named_property(env, fg_obj, "type", fg_type);
+
+    if (cell_data.fg_color_type == 1) {
+        var fg_idx: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.fg_palette_idx, &fg_idx);
+        _ = c.napi_set_named_property(env, fg_obj, "paletteIdx", fg_idx);
+    } else if (cell_data.fg_color_type == 2) {
+        var fg_r: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.fg_rgb.r, &fg_r);
+        _ = c.napi_set_named_property(env, fg_obj, "r", fg_r);
+
+        var fg_g: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.fg_rgb.g, &fg_g);
+        _ = c.napi_set_named_property(env, fg_obj, "g", fg_g);
+
+        var fg_b: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.fg_rgb.b, &fg_b);
+        _ = c.napi_set_named_property(env, fg_obj, "b", fg_b);
+    }
+    _ = c.napi_set_named_property(env, result, "fg", fg_obj);
+
+    // Background color
+    var bg_obj: c.napi_value = undefined;
+    _ = c.napi_create_object(env, &bg_obj);
+
+    var bg_type: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, cell_data.bg_color_type, &bg_type);
+    _ = c.napi_set_named_property(env, bg_obj, "type", bg_type);
+
+    if (cell_data.bg_color_type == 1) {
+        var bg_idx: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.bg_palette_idx, &bg_idx);
+        _ = c.napi_set_named_property(env, bg_obj, "paletteIdx", bg_idx);
+    } else if (cell_data.bg_color_type == 2) {
+        var bg_r: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.bg_rgb.r, &bg_r);
+        _ = c.napi_set_named_property(env, bg_obj, "r", bg_r);
+
+        var bg_g: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.bg_rgb.g, &bg_g);
+        _ = c.napi_set_named_property(env, bg_obj, "g", bg_g);
+
+        var bg_b: c.napi_value = undefined;
+        _ = c.napi_create_uint32(env, cell_data.bg_rgb.b, &bg_b);
+        _ = c.napi_set_named_property(env, bg_obj, "b", bg_b);
+    }
+    _ = c.napi_set_named_property(env, result, "bg", bg_obj);
+
+    // Style flags
+    var bold: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.bold, &bold);
+    _ = c.napi_set_named_property(env, result, "bold", bold);
+
+    var italic: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.italic, &italic);
+    _ = c.napi_set_named_property(env, result, "italic", italic);
+
+    var faint: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.faint, &faint);
+    _ = c.napi_set_named_property(env, result, "faint", faint);
+
+    var inverse: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.inverse, &inverse);
+    _ = c.napi_set_named_property(env, result, "inverse", inverse);
+
+    var invisible: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.invisible, &invisible);
+    _ = c.napi_set_named_property(env, result, "invisible", invisible);
+
+    var strikethrough: c.napi_value = undefined;
+    _ = c.napi_get_boolean(env, cell_data.strikethrough, &strikethrough);
+    _ = c.napi_set_named_property(env, result, "strikethrough", strikethrough);
+
+    var underline: c.napi_value = undefined;
+    _ = c.napi_create_uint32(env, cell_data.underline, &underline);
+    _ = c.napi_set_named_property(env, result, "underline", underline);
+
+    return result;
 }
