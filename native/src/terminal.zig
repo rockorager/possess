@@ -2,9 +2,16 @@ const std = @import("std");
 const ghostty = @import("ghostty");
 
 const Stream = ghostty.Stream(*Terminal);
+
 const Size = struct {
     rows: u16,
     cols: u16,
+};
+
+pub const TerminalOptions = struct {
+    cols: u16,
+    rows: u16,
+    write_callback_ctx: ?*anyopaque = null,
 };
 
 const log = std.log.scoped(.possess);
@@ -15,6 +22,9 @@ pub const Terminal = struct {
     stream: Stream,
     size: Size,
 
+    /// Opaque pointer to napi callback context for writing to process
+    write_callback_ctx: ?*anyopaque = null,
+
     /// The default cursor state. This is used with CSI q. This is
     /// set to true when we're currently in the default cursor state.
     default_cursor: bool = true,
@@ -22,10 +32,10 @@ pub const Terminal = struct {
     default_cursor_blink: ?bool = null,
     default_cursor_color: ?ghostty.color.RGB = null,
 
-    pub fn init(self: *Terminal, allocator: std.mem.Allocator, cols: u16, rows: u16) !void {
+    pub fn init(self: *Terminal, allocator: std.mem.Allocator, options: TerminalOptions) !void {
         const terminal = try ghostty.Terminal.init(allocator, .{
-            .cols = cols,
-            .rows = rows,
+            .cols = options.cols,
+            .rows = options.rows,
         });
         const stream = Stream.init(self);
         self.* = .{
@@ -33,9 +43,10 @@ pub const Terminal = struct {
             .terminal = terminal,
             .stream = stream,
             .size = .{
-                .cols = cols,
-                .rows = rows,
+                .cols = options.cols,
+                .rows = options.rows,
             },
+            .write_callback_ctx = options.write_callback_ctx,
         };
     }
 
@@ -47,6 +58,19 @@ pub const Terminal = struct {
     pub fn nextSlice(self: *Terminal, input: []const u8) !void {
         try self.stream.nextSlice(input);
     }
+
+    /// Write bytes to the process. This is called by the terminal when it needs
+    /// to send data back to the process (e.g., for device status reports).
+    /// The callback_ctx should be a pointer to TerminalContext from main.zig.
+    pub fn writeToProcess(self: *Terminal, data: []const u8) void {
+        if (self.write_callback_ctx) |ctx| {
+            // Call the extern function defined in main.zig
+            possess_terminal_write_callback(ctx, data.ptr, data.len);
+        }
+    }
+
+    // This is implemented in main.zig
+    extern fn possess_terminal_write_callback(ctx: *anyopaque, data_ptr: [*]const u8, data_len: usize) void;
 
     pub fn resize(self: *Terminal, cols: u16, rows: u16) !void {
         try self.terminal.resize(self.allocator, cols, rows);
@@ -90,8 +114,7 @@ pub const Terminal = struct {
     }
 
     pub fn enquiry(self: *Terminal) !void {
-        _ = self;
-        // TODO: callback
+        self.writeToProcess(&[_]u8{0x05}); // ENQ response
     }
 
     pub fn bell(self: *Terminal) !void {
@@ -273,68 +296,59 @@ pub const Terminal = struct {
         params: []const u16,
     ) !void {
         _ = params;
-        _ = self;
-        _ = req;
-        // TODO: implement
 
-        // // For the below, we quack as a VT220. We don't quack as
-        // // a 420 because we don't support DCS sequences.
-        // switch (req) {
-        //     .primary => self.messageWriter(.{
-        //         // 62 = Level 2 conformance
-        //         // 22 = Color text
-        //         // 52 = Clipboard access
-        //         .write_stable = if (self.clipboard_write != .deny)
-        //             "\x1B[?62;22;52c"
-        //         else
-        //             "\x1B[?62;22c",
-        //     }),
-        //
-        //     .secondary => self.messageWriter(.{
-        //         .write_stable = "\x1B[>1;10;0c",
-        //     }),
-        //
-        //     else => log.warn("unimplemented device attributes req: {}", .{req}),
-        // }
+        // For the below, we quack as a VT220. We don't quack as
+        // a 420 because we don't support DCS sequences.
+        switch (req) {
+            .primary => {
+                // 62 = Level 2 conformance
+                // 22 = Color text
+                self.writeToProcess("\x1B[?62;22c");
+            },
+
+            .secondary => {
+                self.writeToProcess("\x1B[>1;10;0c");
+            },
+
+            else => log.warn("unimplemented device attributes req: {}", .{req}),
+        }
     }
 
     pub fn deviceStatusReport(
         self: *Terminal,
         req: ghostty.device_status.Request,
     ) !void {
-        _ = self;
-        _ = req;
-        // TODO: implement
-        // switch (req) {
-        //     .operating_status => self.messageWriter(.{ .write_stable = "\x1B[0n" }),
-        //
-        //     .cursor_position => {
-        //         const pos: struct {
-        //             x: usize,
-        //             y: usize,
-        //         } = if (self.terminal.modes.get(.origin)) .{
-        //             .x = self.terminal.screen.cursor.x -| self.terminal.scrolling_region.left,
-        //             .y = self.terminal.screen.cursor.y -| self.terminal.scrolling_region.top,
-        //         } else .{
-        //             .x = self.terminal.screen.cursor.x,
-        //             .y = self.terminal.screen.cursor.y,
-        //         };
-        //
-        //         // Response always is at least 4 chars, so this leaves the
-        //         // remainder for the row/column as base-10 numbers. This
-        //         // will support a very large terminal.
-        //         var msg: termio.Message = .{ .write_small = .{} };
-        //         const resp = try std.fmt.bufPrint(&msg.write_small.data, "\x1B[{};{}R", .{
-        //             pos.y + 1,
-        //             pos.x + 1,
-        //         });
-        //         msg.write_small.len = @intCast(resp.len);
-        //
-        //         self.messageWriter(msg);
-        //     },
-        //
-        //     .color_scheme => self.surfaceMessageWriter(.{ .report_color_scheme = true }),
-        // }
+        switch (req) {
+            .operating_status => self.writeToProcess("\x1B[0n"),
+
+            .cursor_position => {
+                const pos: struct {
+                    x: usize,
+                    y: usize,
+                } = if (self.terminal.modes.get(.origin)) .{
+                    .x = self.terminal.screen.cursor.x -| self.terminal.scrolling_region.left,
+                    .y = self.terminal.screen.cursor.y -| self.terminal.scrolling_region.top,
+                } else .{
+                    .x = self.terminal.screen.cursor.x,
+                    .y = self.terminal.screen.cursor.y,
+                };
+
+                // Response always is at least 4 chars, so this leaves the
+                // remainder for the row/column as base-10 numbers. This
+                // will support a very large terminal.
+                var buf: [64]u8 = undefined;
+                const resp = try std.fmt.bufPrint(&buf, "\x1B[{d};{d}R", .{
+                    pos.y + 1,
+                    pos.x + 1,
+                });
+
+                self.writeToProcess(resp);
+            },
+
+            .color_scheme => {
+                // TODO: implement color scheme reporting
+            },
+        }
     }
 
     pub inline fn setProtectedMode(self: *Terminal, mode: ghostty.ProtectedMode) !void {
@@ -578,20 +592,20 @@ pub const Terminal = struct {
 
 test "Terminal init and deinit" {
     var terminal: Terminal = undefined;
-    try terminal.init(std.testing.allocator, 80, 24);
+    try terminal.init(std.testing.allocator, .{ .cols = 80, .rows = 24 });
     defer terminal.deinit();
 }
 
 test "Terminal resize" {
     var terminal: Terminal = undefined;
-    try terminal.init(std.testing.allocator, 80, 24);
+    try terminal.init(std.testing.allocator, .{ .cols = 80, .rows = 24 });
     try terminal.resize(40, 12);
     defer terminal.deinit();
 }
 
 test "Terminal nextSlice" {
     var terminal: Terminal = undefined;
-    try terminal.init(std.testing.allocator, 80, 24);
+    try terminal.init(std.testing.allocator, .{ .cols = 80, .rows = 24 });
     try terminal.nextSlice("hello");
     defer terminal.deinit();
 }

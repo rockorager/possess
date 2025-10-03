@@ -34,9 +34,24 @@ const addonPath = join(
     "possess.node",
 );
 
+export interface NativeTerminal {
+    write(data: Uint8Array): void;
+    dispose(): void;
+}
+
+export interface Terminal {
+    write(data: string | Uint8Array): void;
+    dispose(): void;
+}
+
+export interface TerminalOptions {
+    cols: number;
+    rows: number;
+    onWrite: (data: Uint8Array) => void;
+}
+
 interface NativeBindings {
-    example(): string;
-    // TODO: Add your function signatures here
+    createTerminal(options: TerminalOptions): NativeTerminal;
 }
 
 export const native: NativeBindings = require(addonPath);
